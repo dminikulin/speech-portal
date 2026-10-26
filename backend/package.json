@@ -1,0 +1,30 @@
+{
+  "name": "speechportal-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/src/functions/*.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "clean": "rimraf dist",
+    "prestart": "npm run build",
+    "start": "func start",
+    "test": "echo \"No tests yet...\""
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.10.1",
+    "@azure/functions": "^4.16.5",
+    "@azure/storage-blob": "^12.34.0",
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "microsoft-cognitiveservices-speech-sdk": "^1.52.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^18.19.130",
+    "dotenv-config": "^0.1.1",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
+  }
+}
