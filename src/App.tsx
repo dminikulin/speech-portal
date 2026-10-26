@@ -1,12 +1,26 @@
+import { useState } from "react"
 import Header from "./components/Header"
 import Login from "./components/Login"
 import MainContent from "./components/MainContent"
+import { AuthProvider } from "./context/AuthContext"
+import { useAuth } from "./hooks/useAuth"
+import Signup from "./components/Signup"
 
-export default function App() {
-  const authenticated = true
+function AuthScreen() {
+  const [showSignup, setShowSignup] = useState(false)
 
-  if (!authenticated) {
-    return <Login></Login>
+  return showSignup ? (
+    <Signup onToggleLogin={() => setShowSignup(false)} />
+  ) : (
+    <Login onToggleSignup={() => setShowSignup(true)} />
+  )
+}
+
+function AppContent() {
+  const { isAuthenticated } = useAuth()
+
+  if (!isAuthenticated) {
+    return <AuthScreen />
   }
 
   return (
@@ -14,5 +28,13 @@ export default function App() {
       <Header></Header>
       <MainContent></MainContent>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }

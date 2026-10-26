@@ -34,26 +34,75 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog"
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import TranscribedText from "./TranscribedText"
+import type { AudioFileItem } from "@/types/AudioFileItem"
+import { fetchUploadedFiles } from "@/services/files"
+import { useAuth } from "@/hooks/useAuth"
+import { formatDate, formatFileSize } from "@/utils/tableFormatter"
 
 export default function MainContent() {
-  const noFiles = false
-  const [selectedFile, setSelectedFile] = useState<string | null>()
-  const [fileToDelete, setFileToDelete] = useState<string | null>(null)
+  const { user } = useAuth()
+  const userId = user?.id
 
-  const templateFiles = Array.from({ length: 25 }).map(
-    (_, i) => `audio${i + 1}.wav`
-  )
+  const [selectedFile, setSelectedFile] = useState<AudioFileItem | null>()
+  const [fileToDelete, setFileToDelete] = useState<AudioFileItem | null>(null)
 
-  const handleRowClick = (file: string) => {
+  const [files, setFiles] = useState<AudioFileItem[]>([])
+  const [loading, setLoading] = useState(Boolean(userId))
+
+  const loadFiles = useCallback(async () => {
+    if (!userId) return
+    try {
+      const data = await fetchUploadedFiles(userId)
+      setFiles(data || [])
+    } catch (err) {
+      console.error("Error loading files:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
+  const handleUploaded = useCallback(async () => {
+    setLoading(true)
+    await loadFiles()
+  }, [loadFiles])
+
+  useEffect(() => {
+    if (!userId) return
+
+    let cancelled = false
+    fetchUploadedFiles(userId)
+      .then((data) => {
+        if (!cancelled) setFiles(data || [])
+      })
+      .catch((err) => {
+        if (!cancelled) console.error("Error loading files:", err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  const handleRowClick = (file: AudioFileItem) => {
     setSelectedFile((prev) => (prev === file ? null : file))
   }
 
   return (
     <main className="flex min-h-0 min-w-[75%] flex-1 flex-col items-center bg-zinc-50">
-      <NewFileForm className="my-5 self-start"></NewFileForm>
-      {noFiles ? (
+      <NewFileForm
+        className="my-5 self-start"
+        onUploaded={handleUploaded}
+      ></NewFileForm>
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="loader"></div>
+        </div>
+      ) : files.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <Empty className="max-w-md border-2 border-dashed">
             <EmptyHeader>
@@ -70,7 +119,7 @@ export default function MainContent() {
         </div>
       ) : (
         <div className="m-5 flex min-h-0 w-full flex-1 gap-4 overflow-hidden">
-          <div className="min-w-0 flex-1 transition-all duration-300 ease-in-out">
+          <div className="min-w-0 flex-1">
             <ScrollArea className="my-2 h-full">
               <Table>
                 <TableHeader>
@@ -82,21 +131,25 @@ export default function MainContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {templateFiles.map((file) => {
+                  {files.map((file) => {
                     const isSelected = selectedFile === file
                     return (
                       <TableRow
-                        key={file}
+                        key={file.url}
                         onClick={() => handleRowClick(file)}
                         className={`cursor-pointer transition-colors ${
                           isSelected ? "bg-zinc-100/80 font-medium" : ""
                         }`}
                       >
                         <TableCell className="font-mono text-lg">
-                          {file}
+                          {file.name}
                         </TableCell>
-                        <TableCell className="font-light">1 Sept</TableCell>
-                        <TableCell className="font-light">69 KB</TableCell>
+                        <TableCell className="font-light">
+                          {formatDate(file.createdOn)}
+                        </TableCell>
+                        <TableCell className="font-light">
+                          {formatFileSize(file.size)}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="secondary">Ready to transcript</Badge>
                         </TableCell>
@@ -111,7 +164,7 @@ export default function MainContent() {
                               <DropdownMenuItem>
                                 Redo transcription
                               </DropdownMenuItem>
-                              <DropdownMenuSeparator/>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-red-400"
                                 onClick={() => setFileToDelete(file)}
@@ -135,7 +188,7 @@ export default function MainContent() {
           >
             {selectedFile && (
               <TranscribedText
-                fileName={selectedFile}
+                fileName={selectedFile.name}
                 setSelectedFile={setSelectedFile}
               ></TranscribedText>
             )}
@@ -148,7 +201,9 @@ export default function MainContent() {
           >
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete file {fileToDelete}?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  Delete file {fileToDelete?.name}?
+                </AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone.
                 </AlertDialogDescription>

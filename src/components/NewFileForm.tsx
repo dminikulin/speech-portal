@@ -10,17 +10,66 @@ import {
 import { Field, FieldDescription } from "./ui/field"
 import { Input } from "./ui/input"
 import { cn } from "cn"
+import React, { useState } from "react"
+import { uploadAudioFile } from "@/services/upload"
+import { toast } from "./ui/toast"
+import { useAuth } from "@/hooks/useAuth"
+
+interface NewFileFormProps {
+  onUploaded: () => Promise<void>
+  className?: string
+}
 
 export default function NewFileForm({
   className,
-}: React.ComponentProps<"form">) {
+  onUploaded,
+}: NewFileFormProps) {
+  const { user } = useAuth()
+
+  const [open, setOpen] = useState<boolean>(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen)
+    if (!isOpen) {
+      setFile(null)
+      setError(null)
+    }
+  }
+
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!file || isUploading || !user?.id) return
+
+    setIsUploading(true)
+    setError(null)
+
+    try {
+      await uploadAudioFile(file, user.id)
+      await onUploaded()
+
+      toast.add({
+        type: "success",
+        description: `File ${file.name} uploaded`,
+      })
+
+      handleOpenChange(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   return (
-    <Dialog>
-      <form className={cn(className)}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <div className={cn(className)}>
         <DialogTrigger
           render={
             <Button
-              // className="bg-teal-400 hover:bg-teal-200"
+              className="bg-zinc-100 hover:bg-zinc-200"
               size="lg"
               variant="outline"
             >
@@ -28,19 +77,42 @@ export default function NewFileForm({
             </Button>
           }
         ></DialogTrigger>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Upload transcript</DialogTitle>
-          </DialogHeader>
+      </div>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Upload transcript</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
           <Field>
-            <Input type="file"></Input>
+            <Input
+              id="file"
+              type="file"
+              accept="audio/mp3, audio/wav"
+              required
+              disabled={isUploading}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            ></Input>
             <FieldDescription>
               Types of files allowed: <span className="font-mono">.mp3</span>,{" "}
               <span className="font-mono">.wav</span>
             </FieldDescription>
           </Field>
-        </DialogContent>
-      </form>
+
+          {error && (
+            <p role="alert" className="text-red-400">
+              {error}
+            </p>
+          )}
+
+          <Button
+            className="mt-2 w-full"
+            type="submit"
+            disabled={!file || isUploading}
+          >
+            {isUploading ? "Uploading…" : "Upload"}
+          </Button>
+        </form>
+      </DialogContent>
     </Dialog>
   )
 }

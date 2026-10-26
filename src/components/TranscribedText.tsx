@@ -17,10 +17,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu"
+import type { AudioFileItem } from "@/types/AudioFileItem"
 
 interface TranscribedTextProps {
   fileName: string
-  setSelectedFile: (file: string | null) => void
+  setSelectedFile: (file: AudioFileItem | null) => void
 }
 
 const SAMPLE_TEXT = `Lorem ipsum dolor sit amet, consectetur adipiscing elit.
