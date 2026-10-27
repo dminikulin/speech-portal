@@ -7,6 +7,18 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+bin/
+**/bin/
+!Modules/**
+obj
+csx
+.vs
+edge
+Publish
+/packages
+/TestResults
+.env
+
 node_modules
 dist
 dist-ssr
@@ -17,8 +29,16 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+*.user
 *.suo
+*.cscfg
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.zip
+*.Cache
+
+project.lock.json
+appsettings.json
+local.settings.json

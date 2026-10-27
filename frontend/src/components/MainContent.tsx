@@ -54,6 +54,7 @@ export default function MainContent() {
   const loadFiles = useCallback(async () => {
     if (!userId) return
     try {
+      setLoading(true)
       const data = await fetchUploadedFiles(userId)
       setFiles(data || [])
     } catch (err) {
@@ -86,7 +87,7 @@ export default function MainContent() {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, loadFiles])
 
   const handleRowClick = (file: AudioFileItem) => {
     setSelectedFile((prev) => (prev === file ? null : file))

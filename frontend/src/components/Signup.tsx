@@ -1,4 +1,4 @@
-import { useAuth } from "@/hooks/useAuth"
+import { useState } from "react"
 import { Button } from "./ui/button"
 import {
   Card,
@@ -10,18 +10,19 @@ import {
 } from "./ui/card"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
-import { useState } from "react"
+import { useAuth } from "@/hooks/useAuth"
+import { validatePassword } from "@/utils/validatePassword"
 import { cn } from "cn"
 
-interface LoginProps {
-  onToggleSignup: () => void
+interface SignupProps {
+  onToggleLogin: () => void
 }
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "https://speechportal-func-app.azurewebsites.net/api"
 
-export default function Login({ onToggleSignup }: LoginProps) {
+export default function Signup({ onToggleLogin }: SignupProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -31,10 +32,17 @@ export default function Login({ onToggleSignup }: LoginProps) {
   const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
+
+    const passwordCheck = validatePassword(password)
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message || "Invalid password.")
+      return
+    }
+
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -42,23 +50,23 @@ export default function Login({ onToggleSignup }: LoginProps) {
 
       const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.error || "Login failed")
+        throw new Error(data.error || "Signup failed")
       }
 
       login(data.token, data.user)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      setError(err instanceof Error ? err.message : "Signup failed")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-zinc-50">
+    <div className="grid min-h-dvh place-items-center bg-zinc-50">
       <Card className="w-full max-w-sm p-0 pt-4 shadow-lg">
         <CardHeader>
-          <CardTitle className="font-semibold">Log in</CardTitle>
-          <CardDescription>Welcome back!</CardDescription>
+          <CardTitle className="font-semibold">Sign up</CardTitle>
+          <CardDescription>Welcome, whoever you are!</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit}>
@@ -72,10 +80,6 @@ export default function Login({ onToggleSignup }: LoginProps) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={cn({
-                    "border-red-500 bg-red-50":
-                      error === "Invalid email or password.",
-                  })}
                 ></Input>
               </div>
               <div className="grid gap-2">
@@ -88,26 +92,26 @@ export default function Login({ onToggleSignup }: LoginProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   className={cn({
                     "border-red-500 bg-red-50":
-                      error === "Invalid email or password.",
+                      error?.startsWith("Password"),
                   })}
                 ></Input>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Logging in..." : "Login"}
+                {loading ? "Creating account..." : "Sign up"}
               </Button>
             </div>
           </form>
         </CardContent>
         <CardFooter className="flex-col bg-stone-100">
           <div className="flex flex-row items-center gap-2 py-2">
-            <p className="text-zinc-500">Don't have an account?</p>
-            <Button variant="link" onClick={onToggleSignup}>
-              Sign up!
+            <p className="text-zinc-500">Already registered?</p>
+            <Button variant="link" onClick={onToggleLogin} disabled={loading}>
+              Log in
             </Button>
           </div>
         </CardFooter>
       </Card>
-    </main>
+    </div>
   )
 }
