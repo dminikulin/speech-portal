@@ -1,0 +1,12 @@
+{
+  "routes": [
+    {
+      "route": "/api/*",
+      "methods": ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+      "rewrite": "https://speechportal-func-app.azurewebsites.net/api/*"
+    }
+  ],
+  "navigationFallback": {
+    "rewrite": "/index.html"
+  }
+}
