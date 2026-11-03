@@ -40,7 +40,10 @@ import { deleteAudioFile, fetchUploadedFiles } from "@/services/files"
 import { useAuth } from "@/hooks/useAuth"
 import { formatDate, formatFileSize } from "@/utils/tableFormatter"
 import { toast } from "./ui/toast"
-import { requestNotificationPermission, showNotification } from "@/services/notifications"
+import {
+  requestNotificationPermission,
+  showNotification,
+} from "@/services/notifications"
 import { getSignalRConnection } from "@/services/signalR"
 
 export default function MainContent() {
@@ -71,7 +74,7 @@ export default function MainContent() {
           })
         }
       }
-      setFiles(data || [])
+      setFiles(Array.isArray(data) ? data : [])
       previousStatuses.current = new Map(
         data.map((file) => [file.blobPath, file.status])
       )
@@ -82,6 +85,7 @@ export default function MainContent() {
       )
     } catch (err) {
       console.error("Error loading files:", err)
+      setFiles([])
     } finally {
       setLoading(false)
     }
@@ -155,9 +159,8 @@ export default function MainContent() {
     }
   }, [userId, loadFiles])
 
-  const hasTranscribingFiles = files.some(
-    (file) => file.status === "Transcribing"
-  )
+  const hasTranscribingFiles =
+    Array.isArray(files) && files.some((f) => f.status === "Transcribing")
 
   useEffect(() => {
     if (!userId || !hasTranscribingFiles) {

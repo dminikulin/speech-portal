@@ -1,18 +1,36 @@
 import type { AudioFileItem } from "@/types/AudioFileItem"
 
 const BASE_URL = import.meta.env.VITE_API_URL || ""
-const cleanBase = BASE_URL.replace(/\/+$/, '');
+const cleanBase = BASE_URL.replace(/\/+$/, "")
 
 export const fetchUploadedFiles = async (
   userId: string
 ): Promise<AudioFileItem[]> => {
   const query = new URLSearchParams({ userId }).toString()
-  const response = await fetch(`${cleanBase}/api/files?${query}`)
+  const res = await fetch(`${cleanBase}/api/files?${query}`)
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch files: ${response.statusText}`)
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(
+      errorData.error || `Failed to fetch files (Status: ${res.status})`
+    )
   }
-  return response.json()
+
+  const data = await res.json()
+
+  // Handle case where data is wrapped in { files: [...] }
+  if (Array.isArray(data)) {
+    return data
+  } else if (Array.isArray(data.files)) {
+    return data.files
+  }
+
+  // If the backend sent an error object with status 200:
+  if (data.error) {
+    throw new Error(data.error)
+  }
+
+  return []
 }
 
 export async function deleteAudioFile(
