@@ -23,7 +23,7 @@ export async function deleteAudioFile(
 ): Promise<void> {
   const query = new URLSearchParams({ userId, blobPath }).toString()
   const res = await fetch(`/api/files/delete?${query}`, {
-    method: "DELETE",
+    method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
