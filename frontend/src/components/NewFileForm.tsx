@@ -11,12 +11,17 @@ import { Field, FieldDescription } from "./ui/field"
 import { Input } from "./ui/input"
 import { cn } from "cn"
 import React, { useState } from "react"
+import { triggerTranscription } from "@/services/files"
 import { uploadAudioFile } from "@/services/upload"
 import { toast } from "./ui/toast"
 import { useAuth } from "@/hooks/useAuth"
+import type { AudioFileItem } from "@/types/AudioFileItem"
 
 interface NewFileFormProps {
-  onUploaded: () => Promise<void>
+  onUploaded: (
+    blobPath: string,
+    status: NonNullable<AudioFileItem["status"]>
+  ) => Promise<void>
   className?: string
 }
 
@@ -46,21 +51,56 @@ export default function NewFileForm({
     setIsUploading(true)
     setError(null)
 
+    let blobPath: string
     try {
-      await uploadAudioFile(file, user.id)
-      await onUploaded()
-
-      toast.add({
-        type: "success",
-        description: `File ${file.name} uploaded`,
-      })
-
-      handleOpenChange(false)
+      blobPath = await uploadAudioFile(file, user.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed")
-    } finally {
       setIsUploading(false)
+      return
     }
+
+    let status: NonNullable<AudioFileItem["status"]> = "Failed"
+    let transcriptionError: unknown
+    try {
+      await triggerTranscription(blobPath, user.id)
+      status = "Transcribing"
+    } catch (err) {
+      transcriptionError = err
+    }
+
+    try {
+      await onUploaded(blobPath, status)
+    } catch (err) {
+      toast.add({
+        type: "error",
+        description:
+          err instanceof Error
+            ? `File uploaded, but the file list could not be refreshed: ${err.message}`
+            : "File uploaded, but the file list could not be refreshed.",
+      })
+      handleOpenChange(false)
+      setIsUploading(false)
+      return
+    }
+
+    if (transcriptionError) {
+      toast.add({
+        type: "error",
+        description:
+          transcriptionError instanceof Error
+            ? `File uploaded, but transcription could not start: ${transcriptionError.message}`
+            : "File uploaded, but transcription could not start.",
+      })
+    } else {
+      toast.add({
+        type: "success",
+        description: `File ${file.name} uploaded. Transcription started.`,
+      })
+    }
+
+    handleOpenChange(false)
+    setIsUploading(false)
   }
 
   return (

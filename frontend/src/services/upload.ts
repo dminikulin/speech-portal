@@ -2,28 +2,23 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "https://speechportal-func-app.azurewebsites.net/api"
 
-interface UploadRequestResponse {
-  uploadUrl: string
-  blobName: string
-  containerName: string
-}
-
 export const uploadAudioFile = async (
   file: File,
   userId: string
-) => {
+): Promise<string> => {
   // 1. Request temporary write-only SAS URL from Function App
-  const response = await fetch(`${API_BASE_URL}/upload-request`, {
+  const requestRes = await fetch(`${API_BASE_URL}/files/upload-request`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fileName: file.name, userId }),
   })
 
-  if (!response.ok) {
-    throw new Error(`Failed to get SAS token: ${response.statusText}`)
+  if (!requestRes.ok) {
+    const err = await requestRes.json().catch(() => ({}))
+    throw new Error(err.error || "Failed to generate upload URL")
   }
 
-  const { uploadUrl, blobName }: UploadRequestResponse = await response.json()
+  const { uploadUrl, blobPath } = await requestRes.json()
 
   // 2. Stream the binary file directly to Azure Blob Storage
   // The header 'x-ms-blob-type: BlockBlob' is strictly required by Azure Blob REST API
@@ -31,15 +26,16 @@ export const uploadAudioFile = async (
     method: "PUT",
     headers: {
       "x-ms-blob-type": "BlockBlob",
-      "Content-Type": file.type || "audio/wav",
+      "Content-Type": file.type || "audio/octet-stream",
     },
     body: file,
   })
 
   if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text()
+    console.error("Azure Storage PUT error:", errorText)
     throw new Error(`Blob upload failed: ${uploadResponse.statusText}`)
   }
 
-  console.log("Audio successfully stored in Azure Blob Storage:", blobName)
-  return { blobName }
+  return blobPath
 }

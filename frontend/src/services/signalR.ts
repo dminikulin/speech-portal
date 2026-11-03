@@ -6,35 +6,21 @@ const API_BASE_URL =
 
 let connection: signalR.HubConnection | null = null
 
-export const startSignalRConnection = async (
-  onStatusUpdate: (data: {
-    jobId: string
-    status: string
-    transcript?: string
-  }) => void
-) => {
+export const getSignalRConnection = async (
+  userId: string
+): Promise<signalR.HubConnection> => {
   if (connection && connection.state === signalR.HubConnectionState.Connected) {
     return connection
   }
 
-  // Passing the base API url automatically triggers /negotiate
   connection = new signalR.HubConnectionBuilder()
-    .withUrl(API_BASE_URL.replace(/\/$/, "")) // Strips trailing slash
-    .withAutomaticReconnect([0, 2000, 5000, 10000])
-    .configureLogging(signalR.LogLevel.Information)
+    .withUrl(API_BASE_URL, {
+      headers: { "x-user-id": userId },
+    })
+    .withAutomaticReconnect()
+    .configureLogging(signalR.LogLevel.Warning)
     .build()
 
-  connection.on("jobStatusUpdated", (payload) => {
-    console.log("Real-time event received:", payload)
-    onStatusUpdate(payload)
-  })
-
-  try {
-    await connection.start()
-    console.log("SignalR Connected successfully.")
-  } catch (err) {
-    console.error("SignalR Connection Error: ", err)
-  }
-
+  await connection.start()
   return connection
 }

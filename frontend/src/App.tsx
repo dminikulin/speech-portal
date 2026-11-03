@@ -5,6 +5,7 @@ import MainContent from "./components/MainContent"
 import { AuthProvider } from "./context/AuthContext"
 import { useAuth } from "./hooks/useAuth"
 import Signup from "./components/Signup"
+import { useAutoLogout } from "./hooks/useAutoLogout"
 
 function AuthScreen() {
   const [showSignup, setShowSignup] = useState(false)
@@ -18,6 +19,8 @@ function AuthScreen() {
 
 function AppContent() {
   const { isAuthenticated } = useAuth()
+
+  useAutoLogout()
 
   if (!isAuthenticated) {
     return <AuthScreen />

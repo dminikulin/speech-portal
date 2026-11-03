@@ -21,7 +21,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu"
 import {
@@ -34,29 +33,53 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import TranscribedText from "./TranscribedText"
 import type { AudioFileItem } from "@/types/AudioFileItem"
-import { fetchUploadedFiles } from "@/services/files"
+import { deleteAudioFile, fetchUploadedFiles } from "@/services/files"
 import { useAuth } from "@/hooks/useAuth"
 import { formatDate, formatFileSize } from "@/utils/tableFormatter"
+import { toast } from "./ui/toast"
+import { requestNotificationPermission, showNotification } from "@/services/notifications"
+import { getSignalRConnection } from "@/services/signalR"
 
 export default function MainContent() {
   const { user } = useAuth()
   const userId = user?.id
 
-  const [selectedFile, setSelectedFile] = useState<AudioFileItem | null>()
+  const [selectedFile, setSelectedFile] = useState<AudioFileItem | null>(null)
   const [fileToDelete, setFileToDelete] = useState<AudioFileItem | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [files, setFiles] = useState<AudioFileItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))
+  const previousStatuses = useRef(new Map<string, AudioFileItem["status"]>())
 
   const loadFiles = useCallback(async () => {
     if (!userId) return
     try {
       setLoading(true)
       const data = await fetchUploadedFiles(userId)
+      for (const file of data) {
+        if (
+          previousStatuses.current.get(file.blobPath) === "Transcribing" &&
+          file.status === "Transcribed"
+        ) {
+          toast.add({
+            type: "success",
+            description: `File ${file.name} transcribed`,
+          })
+        }
+      }
       setFiles(data || [])
+      previousStatuses.current = new Map(
+        data.map((file) => [file.blobPath, file.status])
+      )
+      setSelectedFile((current) =>
+        current
+          ? (data.find((file) => file.blobPath === current.blobPath) ?? current)
+          : null
+      )
     } catch (err) {
       console.error("Error loading files:", err)
     } finally {
@@ -64,10 +87,48 @@ export default function MainContent() {
     }
   }, [userId])
 
-  const handleUploaded = useCallback(async () => {
-    setLoading(true)
-    await loadFiles()
-  }, [loadFiles])
+  const handleUploaded = useCallback(
+    async (blobPath: string, status: NonNullable<AudioFileItem["status"]>) => {
+      if (!userId) return
+
+      setLoading(true)
+      try {
+        const uploadedFiles = await fetchUploadedFiles(userId)
+        const refreshedFiles = uploadedFiles.map((file) =>
+          file.blobPath === blobPath && file.status !== "Transcribed"
+            ? { ...file, status }
+            : file
+        )
+        previousStatuses.current = new Map(
+          refreshedFiles.map((file) => [file.blobPath, file.status])
+        )
+        setFiles(refreshedFiles)
+        const uploadedFile = refreshedFiles.find(
+          (file) => file.blobPath === blobPath
+        )
+        if (!uploadedFile) {
+          throw new Error("Uploaded file was not found in the file list.")
+        }
+        if (
+          status === "Transcribing" &&
+          uploadedFile.status === "Transcribed"
+        ) {
+          toast.add({
+            type: "success",
+            description: `File ${uploadedFile.name} transcribed`,
+          })
+        }
+      } finally {
+        setLoading(false)
+      }
+    },
+    [userId]
+  )
+
+  useEffect(() => {
+    // Ask for permission when the user enters the main screen
+    requestNotificationPermission()
+  }, [])
 
   useEffect(() => {
     if (!userId) return
@@ -75,7 +136,12 @@ export default function MainContent() {
     let cancelled = false
     fetchUploadedFiles(userId)
       .then((data) => {
-        if (!cancelled) setFiles(data || [])
+        if (!cancelled) {
+          setFiles(data || [])
+          previousStatuses.current = new Map(
+            data.map((file) => [file.blobPath, file.status])
+          )
+        }
       })
       .catch((err) => {
         if (!cancelled) console.error("Error loading files:", err)
@@ -89,8 +155,105 @@ export default function MainContent() {
     }
   }, [userId, loadFiles])
 
+  const hasTranscribingFiles = files.some(
+    (file) => file.status === "Transcribing"
+  )
+
+  useEffect(() => {
+    if (!userId || !hasTranscribingFiles) {
+      return
+    }
+
+    let cancelled = false
+    const refreshStatuses = async () => {
+      try {
+        const data = await fetchUploadedFiles(userId)
+        if (cancelled) return
+
+        for (const file of data) {
+          if (
+            previousStatuses.current.get(file.blobPath) === "Transcribing" &&
+            file.status === "Transcribed"
+          ) {
+            toast.add({
+              type: "success",
+              description: `File ${file.name} transcribed`,
+            })
+          }
+        }
+
+        previousStatuses.current = new Map(
+          data.map((file) => [file.blobPath, file.status])
+        )
+        setFiles(data)
+        setSelectedFile((current) =>
+          current
+            ? (data.find((file) => file.blobPath === current.blobPath) ??
+              current)
+            : null
+        )
+      } catch (err) {
+        console.error("Error checking transcription status:", err)
+      }
+    }
+
+    const intervalId = setInterval(() => {
+      void refreshStatuses()
+    }, 15000)
+
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
+  }, [hasTranscribingFiles, userId])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    getSignalRConnection(user.id).then((connection) => {
+      connection.on("jobStatusUpdated", (data) => {
+        // 1. Play browser notification
+        showNotification("Transcription Complete", {
+          body: `Your transcript for "${data.fileName || "audio file"}" is ready.`,
+        })
+
+        // 2. Immediately reload table rows to flip badge to "Transcribed"
+        loadFiles()
+      })
+    })
+  }, [user?.id, loadFiles])
+
   const handleRowClick = (file: AudioFileItem) => {
     setSelectedFile((prev) => (prev === file ? null : file))
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!fileToDelete || !user?.id) return
+
+    setIsDeleting(true)
+    try {
+      await deleteAudioFile(fileToDelete.blobPath, user.id)
+
+      // If the currently open detail panel was the deleted file, close it
+      if (selectedFile?.blobPath === fileToDelete.blobPath) {
+        setSelectedFile(null)
+      }
+
+      toast.add({
+        type: "success",
+        description: `File ${fileToDelete.name} deleted`,
+      })
+
+      setFileToDelete(null)
+      await loadFiles() // Refresh table list
+    } catch (err) {
+      toast.add({
+        type: "error",
+        description: err instanceof Error ? err.message : "Deletion failed",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -152,7 +315,19 @@ export default function MainContent() {
                           {formatFileSize(file.size)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary">Ready to transcript</Badge>
+                          {file.status && (
+                            <Badge
+                              variant={
+                                file.status === "Transcribed"
+                                  ? "default"
+                                  : file.status === "Transcribing"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                            >
+                              {file.status}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
@@ -162,10 +337,6 @@ export default function MainContent() {
                               }
                             ></DropdownMenuTrigger>
                             <DropdownMenuContent className="w-48" align="end">
-                              <DropdownMenuItem>
-                                Redo transcription
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-red-400"
                                 onClick={() => setFileToDelete(file)}
@@ -182,37 +353,43 @@ export default function MainContent() {
               </Table>
             </ScrollArea>
           </div>
-          <aside
-            className={`shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${
-              selectedFile ? "w-md" : "w-0"
-            }`}
-          >
-            {selectedFile && (
-              <TranscribedText
-                fileName={selectedFile.name}
-                setSelectedFile={setSelectedFile}
-              ></TranscribedText>
-            )}
-          </aside>
+          <TranscribedText
+            file={selectedFile ?? null}
+            open={selectedFile !== null}
+            onOpenChange={(open) => {
+              if (!open) setSelectedFile(null)
+            }}
+            onSuccess={loadFiles}
+          />
           <AlertDialog
             open={fileToDelete !== null}
             onOpenChange={(open) => {
-              if (!open) setFileToDelete(null)
+              if (!open && !isDeleting) setFileToDelete(null)
             }}
           >
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>
-                  Delete file {fileToDelete?.name}?
+                  Delete file{" "}
+                  <span className="font-mono">{fileToDelete?.name}?</span>
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction className="bg-red-400">
-                  Continue
+                <AlertDialogCancel disabled={isDeleting}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-400 hover:bg-red-500"
+                  disabled={isDeleting}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleDeleteConfirm()
+                  }}
+                >
+                  {isDeleting ? "Deleting..." : "Continue"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

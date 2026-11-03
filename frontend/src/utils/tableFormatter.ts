@@ -9,6 +9,7 @@ export function formatFileSize(bytes: number): string {
 export function formatDate(dateString: string): string {
   if (!dateString) return "—"
   const date = new Date(dateString)
-  return isNaN(date.getTime()) ? dateString : date.toLocaleString()
+  return isNaN(date.getTime())
+    ? dateString
+    : date.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })
 }
-
