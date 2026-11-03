@@ -1,13 +1,13 @@
 import type { AudioFileItem } from "@/types/AudioFileItem"
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = import.meta.env.VITE_API_URL || ""
 
 export const fetchUploadedFiles = async (
   userId: string
 ): Promise<AudioFileItem[]> => {
-  const response = await fetch(
-    `${BASE_URL}/files?userId=${encodeURIComponent(userId)}`
-  )
+  const query = new URLSearchParams({ userId }).toString()
+  const response = await fetch(`${BASE_URL}/api/files?${query}`)
+
   if (!response.ok) {
     throw new Error(`Failed to fetch files: ${response.statusText}`)
   }
@@ -21,12 +21,12 @@ export async function deleteAudioFile(
 ): Promise<void> {
   const query = new URLSearchParams({ userId, blobPath }).toString()
   const res = await fetch(`${BASE_URL}/api/files/delete?${query}`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ userId, blobPath }),
-  });
+  })
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}))
