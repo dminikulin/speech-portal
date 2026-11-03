@@ -18,6 +18,8 @@ Publish
 /packages
 /TestResults
 .env
+.env.development
+.env.production
 
 node_modules
 dist

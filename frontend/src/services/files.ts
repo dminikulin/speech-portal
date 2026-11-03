@@ -1,14 +1,12 @@
 import type { AudioFileItem } from "@/types/AudioFileItem"
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  "https://speechportal-func-app.azurewebsites.net/api"
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export const fetchUploadedFiles = async (
   userId: string
 ): Promise<AudioFileItem[]> => {
   const response = await fetch(
-    `${API_BASE_URL}/files?userId=${encodeURIComponent(userId)}`
+    `${BASE_URL}/files?userId=${encodeURIComponent(userId)}`
   )
   if (!response.ok) {
     throw new Error(`Failed to fetch files: ${response.statusText}`)
@@ -22,13 +20,13 @@ export async function deleteAudioFile(
   userId: string
 ): Promise<void> {
   const query = new URLSearchParams({ userId, blobPath }).toString()
-  const res = await fetch(`/api/files/delete?${query}`, {
-    method: "POST",
+  const res = await fetch(`${BASE_URL}/api/files/delete?${query}`, {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ userId, blobPath }),
-  })
+  });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}))
@@ -40,7 +38,7 @@ export const triggerTranscription = async (
   blobPath: string,
   userId: string
 ): Promise<{ message: string; jobUrl: string; status: string }> => {
-  const response = await fetch(`${API_BASE_URL}/transcriptions/start`, {
+  const response = await fetch(`${BASE_URL}/transcriptions/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ blobPath, userId }),
@@ -58,7 +56,7 @@ export const fetchTranscript = async (
   blobPath: string,
   userId: string
 ): Promise<string | null> => {
-  const url = `${API_BASE_URL}/transcriptions/get?userId=${encodeURIComponent(userId)}&blobPath=${encodeURIComponent(blobPath)}`
+  const url = `${BASE_URL}/transcriptions/get?userId=${encodeURIComponent(userId)}&blobPath=${encodeURIComponent(blobPath)}`
   const res = await fetch(url)
   if (res.status === 202) {
     return null
