@@ -72,6 +72,9 @@ export default function MainContent() {
             type: "success",
             description: `File ${file.name} transcribed`,
           })
+          showNotification("Transcription Complete", {
+            body: `Transcript for "${file.name}" is ready.`,
+          })
         }
       }
       setFiles(Array.isArray(data) ? data : [])
@@ -181,6 +184,10 @@ export default function MainContent() {
             toast.add({
               type: "success",
               description: `File ${file.name} transcribed`,
+            })
+
+            showNotification("Transcription Complete", {
+              body: `Transcript for "${file.name}" is ready.`,
             })
           }
         }
