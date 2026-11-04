@@ -1,0 +1,8 @@
+name = "speechportal-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-04-01"
+workers_dev = true
+
+[vars]
+BACKEND_HOST = "https://speechportal-func-app.azurewebsites.net"
+FRONTEND_HOST = "https://polite-stone-05a4dec0f.4.azurestaticapps.net/"
