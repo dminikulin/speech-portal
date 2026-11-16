@@ -59,17 +59,12 @@ export default function NewFileForm({
       return
     }
 
-    let status: NonNullable<AudioFileItem["status"]> = "Failed"
-    let transcriptionError: unknown
     try {
       await onUploaded(blobPath, "Transcribing")
-      status = "Transcribing"
-    } catch (err) {
-      transcriptionError = err
-    }
-
-    try {
-      await onUploaded(blobPath, status)
+      toast.add({
+        type: "success",
+        description: `File ${file.name} uploaded. Transcription started.`,
+      })
     } catch (err) {
       toast.add({
         type: "error",
@@ -78,28 +73,10 @@ export default function NewFileForm({
             ? `File uploaded, but the file list could not be refreshed: ${err.message}`
             : "File uploaded, but the file list could not be refreshed.",
       })
+    } finally {
       handleOpenChange(false)
       setIsUploading(false)
-      return
     }
-
-    if (transcriptionError) {
-      toast.add({
-        type: "error",
-        description:
-          transcriptionError instanceof Error
-            ? `File uploaded, but transcription could not start: ${transcriptionError.message}`
-            : "File uploaded, but transcription could not start.",
-      })
-    } else {
-      toast.add({
-        type: "success",
-        description: `File ${file.name} uploaded. Transcription started.`,
-      })
-    }
-
-    handleOpenChange(false)
-    setIsUploading(false)
   }
 
   return (
