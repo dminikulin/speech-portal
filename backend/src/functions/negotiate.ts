@@ -1,9 +1,16 @@
-import { app, HttpRequest, HttpResponseInit, input, InvocationContext } from '@azure/functions';
+import {
+  app,
+  HttpRequest,
+  HttpResponseInit,
+  input,
+  InvocationContext,
+} from '@azure/functions';
 
 const signalRInput = input.generic({
   type: 'signalRConnectionInfo',
   name: 'connectionInfo',
-  hubName: 'speechHub',
+  hubName: 'speechportal',
+  userId: '{query.userId}',
   connectionStringSetting: 'AzureSignalRConnectionString',
 });
 

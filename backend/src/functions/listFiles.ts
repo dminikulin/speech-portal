@@ -129,7 +129,9 @@ export async function listFiles(
 
     const hasTranscript = hasContainerTranscript || hasSpeechJob;
 
-    const transcriptionStatus = blob.metadata?.transcriptionstatus;
+    const transcriptionStatus = (
+      blob.metadata?.transcriptionstatus || ''
+    ).toLowerCase();
     const status = hasTranscript
       ? 'Transcribed'
       : transcriptionStatus === 'transcribing'

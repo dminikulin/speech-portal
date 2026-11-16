@@ -20,7 +20,10 @@ export async function onTranscriptCreated(
 
   // Azure Speech writes multiple files (e.g., report.json and contenturl_0.json).
   // Only react to the actual transcript output file, ignoring report.json.
-  if (!blobUrl.includes('/transcripts/') || blobUrl.endsWith('report.json')) {
+  if (
+    !blobUrl.includes('/transcripts/') ||
+    !blobUrl.includes('/contenturl_0.json')
+  ) {
     return;
   }
 
@@ -70,6 +73,29 @@ export async function onTranscriptCreated(
     ...props.metadata,
     transcriptionstatus: 'Transcribed',
   });
+
+  const transcriptContainer =
+    blobServiceClient.getContainerClient('transcripts');
+  const sourceJsonClient = transcriptContainer.getBlobClient(
+    `${jobUuid}/contenturl_0.json`,
+  );
+
+  // Target path mirrors audio-in: "test-portal-dev/1793650878654-quantization.json"
+  const cleanTranscriptPath = matchedBlobPath.replace(/\.[^/.]+$/, '.json');
+  const targetJsonClient =
+    transcriptContainer.getBlockBlobClient(cleanTranscriptPath);
+
+  // Copy raw Speech output into the clean user folder
+  const copyPoller = await targetJsonClient.beginCopyFromURL(
+    sourceJsonClient.url,
+  );
+  await copyPoller.pollUntilDone();
+
+  // Remove the raw UUID folder files (contenturl_0.json and report.json)
+  await sourceJsonClient.deleteIfExists();
+  await transcriptContainer
+    .getBlobClient(`${jobUuid}/report.json`)
+    .deleteIfExists();
 
   context.extraOutputs.set(signalROutput, [
     {

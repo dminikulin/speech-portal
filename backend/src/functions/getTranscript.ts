@@ -136,9 +136,13 @@ export async function getTranscript(
       const transcriptionId = audioProps.metadata?.transcriptionid;
 
       if (transcriptionId) {
-        const directJsonClient = transcriptContainer.getBlobClient(
-          `${transcriptionId}/contenturl_0.json`,
+        const expectedJsonPath = normalizedBlobPath.replace(
+          /\.[^/.]+$/,
+          '.json',
         );
+        const directJsonClient =
+          transcriptContainer.getBlobClient(expectedJsonPath);
+
         if (await directJsonClient.exists()) {
           const download = await directJsonClient.download();
           const content = await streamToText(download.readableStreamBody);
