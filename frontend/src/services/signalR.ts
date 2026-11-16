@@ -1,24 +1,25 @@
 import * as signalR from "@microsoft/signalr"
 
-const API_BASE_URL =
+const RAW_BASE_URL =
+  import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  "https://speechportal-func-app.azurewebsites.net/api"
+  "https://speechportal-func-app.azurewebsites.net"
 
-let connection: signalR.HubConnection | null = null
+const cleanHost = RAW_BASE_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "")
 
 export const getSignalRConnection = async (
   userId: string
 ): Promise<signalR.HubConnection> => {
-  if (connection && connection.state === signalR.HubConnectionState.Connected) {
-    return connection
-  }
+  const sanitizedUserId = userId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
 
-  connection = new signalR.HubConnectionBuilder()
-    .withUrl(API_BASE_URL, {
-      headers: { "x-user-id": userId },
+  const connection = new signalR.HubConnectionBuilder()
+    .withUrl(`${cleanHost}/api`, {
+      headers: { "x-ms-signalr-userid": sanitizedUserId },
     })
     .withAutomaticReconnect()
-    .configureLogging(signalR.LogLevel.Warning)
     .build()
 
   await connection.start()

@@ -10,7 +10,7 @@ const signalRInput = input.generic({
   type: 'signalRConnectionInfo',
   name: 'connectionInfo',
   hubName: 'speechportal',
-  userId: '{query.userId}',
+  userId: '{headers.x-ms-signalr-userid}',
   connectionStringSetting: 'AzureSignalRConnectionString',
 });
 
