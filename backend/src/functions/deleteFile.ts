@@ -8,7 +8,7 @@ import {
   BlobServiceClient,
   StorageSharedKeyCredential,
 } from '@azure/storage-blob';
-import { streamToText } from '../utils/streamToText';
+import { cleanupTranscriptArtifacts } from '../utils/cleanupTranscripts';
 
 export async function deleteFile(
   request: HttpRequest,
@@ -57,7 +57,11 @@ export async function deleteFile(
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '-');
-  if (!blobPath.startsWith(`${sanitizedUserId}/`)) {
+  const normalizedBlobPath = blobPath.includes('/')
+    ? blobPath
+    : `${sanitizedUserId}/${blobPath}`;
+
+  if (!normalizedBlobPath.startsWith(`${sanitizedUserId}/`)) {
     return {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
@@ -72,58 +76,25 @@ export async function deleteFile(
   );
 
   const audioContainer = blobServiceClient.getContainerClient('audio-in');
-  const transcriptContainer =
-    blobServiceClient.getContainerClient('transcripts');
-
-  const rawFileName = blobPath.split('/').pop() || '';
-  const baseName = rawFileName.replace(/\.[^/.]+$/, '');
-
   try {
-    // 1. Delete the audio file from audio-in
-    const audioBlob = audioContainer.getBlockBlobClient(blobPath);
+    const audioBlob = audioContainer.getBlockBlobClient(normalizedBlobPath);
+    let transcriptionId: string | undefined;
+
+    // 1. Read transcriptionid metadata BEFORE deleting the audio blob
+    if (await audioBlob.exists()) {
+      const props = await audioBlob.getProperties();
+      transcriptionId = props.metadata?.transcriptionid;
+    }
+
+    // 2. Delete all associated transcript JSONs, UUID folders, and Speech job
+    await cleanupTranscriptArtifacts(
+      blobServiceClient,
+      normalizedBlobPath,
+      transcriptionId,
+    );
+
+    // 3. Delete the audio file itself
     await audioBlob.deleteIfExists();
-
-    // 2. Scan and find matching transcript artifacts
-    const foldersToDelete = new Set<string>();
-
-    for await (const blob of transcriptContainer.listBlobsFlat()) {
-      if (blob.name.endsWith('.json')) {
-        const tClient = transcriptContainer.getBlobClient(blob.name);
-        try {
-          const download = await tClient.download();
-          const content = await streamToText(download.readableStreamBody);
-          const parsed = JSON.parse(content);
-          const sourceUrl =
-            parsed.source || parsed.properties?.contentUrl || '';
-
-          if (
-            sourceUrl.includes(baseName) ||
-            sourceUrl.includes(encodeURIComponent(baseName)) ||
-            blob.name.includes(baseName)
-          ) {
-            const slashIndex = blob.name.lastIndexOf('/');
-            if (slashIndex !== -1) {
-              foldersToDelete.add(blob.name.substring(0, slashIndex + 1));
-            } else {
-              await tClient.deleteIfExists();
-            }
-          }
-        } catch {
-          // Skip unparseable JSON files
-        }
-      }
-    }
-
-    // 3. Delete entire GUID folder(s) containing contenturl_0.json and report.json
-    for (const prefix of foldersToDelete) {
-      for await (const fileInFolder of transcriptContainer.listBlobsFlat({
-        prefix,
-      })) {
-        await transcriptContainer
-          .getBlobClient(fileInFolder.name)
-          .deleteIfExists();
-      }
-    }
 
     return {
       status: 200,

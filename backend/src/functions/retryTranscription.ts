@@ -8,6 +8,7 @@ import {
   BlobServiceClient,
   StorageSharedKeyCredential,
 } from '@azure/storage-blob';
+import { cleanupTranscriptArtifacts } from '../utils/cleanupTranscripts';
 
 export async function retryTranscription(
   request: HttpRequest,
@@ -45,9 +46,20 @@ export async function retryTranscription(
     return { status: 404, jsonBody: { error: 'Audio blob not found' } };
   }
 
+  const props = await blobClient.getProperties();
+  await cleanupTranscriptArtifacts(
+    blobServiceClient,
+    blobPath,
+    props.metadata?.transcriptionid,
+  );
+
   // Self-copy fires a fresh Microsoft.Storage.BlobCreated event for Event Grid
   const poller = await blobClient.beginCopyFromURL(blobClient.url, {
-    metadata: { transcriptionstatus: 'Transcribing' },
+    metadata: {
+      ...props.metadata,
+      transcriptionstatus: 'Transcribing',
+      transcriptionid: '',
+    },
   });
   await poller.pollUntilDone();
 

@@ -155,6 +155,26 @@ export async function getTranscript(
             jsonBody: { text: combinedText },
           };
         }
+
+        const audioBlobClient =
+          audioContainer.getBlockBlobClient(normalizedBlobPath);
+        if (await audioBlobClient.exists()) {
+          const audioProps = await audioBlobClient.getProperties();
+          const status = (
+            audioProps.metadata?.transcriptionstatus || ''
+          ).toLowerCase();
+
+          if (status === 'transcribing') {
+            return {
+              status: 202,
+              headers: { 'Content-Type': 'application/json' },
+              jsonBody: {
+                status: 'Running',
+                message: 'Transcription in progress.',
+              },
+            };
+          }
+        }
       }
     }
 

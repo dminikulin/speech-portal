@@ -91,11 +91,12 @@ export async function onTranscriptCreated(
   );
   await copyPoller.pollUntilDone();
 
-  // Remove the raw UUID folder files (contenturl_0.json and report.json)
-  await sourceJsonClient.deleteIfExists();
-  await transcriptContainer
-    .getBlobClient(`${jobUuid}/report.json`)
-    .deleteIfExists();
+  // Remove everything remaining inside the raw <jobUuid>/ folder
+  for await (const blob of transcriptContainer.listBlobsFlat({
+    prefix: `${jobUuid}/`,
+  })) {
+    await transcriptContainer.getBlobClient(blob.name).deleteIfExists();
+  }
 
   context.extraOutputs.set(signalROutput, [
     {
