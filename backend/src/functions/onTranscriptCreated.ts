@@ -31,48 +31,53 @@ export async function onTranscriptCreated(
     return;
   }
 
-  // Extract path inside 'transcripts': e.g. "<userId>/<timestamp>-audio.mp3/contenturl_0.json"
+  // Extract <job-uuid> from ".../transcripts/<job-uuid>/contenturl_0.json"
   const urlParts = new URL(blobUrl);
   const pathSegments = urlParts.pathname.split('/');
   const transcriptsIdx = pathSegments.indexOf('transcripts');
-  const relativeSegments = pathSegments.slice(transcriptsIdx + 1);
+  const jobUuid = pathSegments[transcriptsIdx + 1];
 
-  if (relativeSegments.length < 2) return;
+  if (!jobUuid) return;
 
-  const userId = relativeSegments[0];
-  const audioFileName = relativeSegments[1];
-  const audioBlobPath = `${userId}/${audioFileName}`;
-
-  // 1. Update the source audio blob's metadata status to "Transcribed"
-  const credential = new StorageSharedKeyCredential(accountName, accountKey);
   const blobServiceClient = new BlobServiceClient(
     `https://${accountName}.blob.core.windows.net`,
-    credential,
+    new StorageSharedKeyCredential(accountName, accountKey),
   );
+  const containerClient = blobServiceClient.getContainerClient('audio-in');
+  let matchedBlobPath: string | null = null;
 
-  const audioBlobClient = blobServiceClient
-    .getContainerClient('audio-in')
-    .getBlockBlobClient(audioBlobPath);
-
-  try {
-    const props = await audioBlobClient.getProperties();
-    await audioBlobClient.setMetadata({
-      ...props.metadata,
-      transcriptionstatus: 'Transcribed',
-    });
-  } catch (err) {
-    context.warn(`Could not update metadata for ${audioBlobPath}:`, err);
+  for await (const blob of containerClient.listBlobsFlat({
+    includeMetadata: true,
+  })) {
+    if (blob.metadata?.transcriptionid === jobUuid) {
+      matchedBlobPath = blob.name;
+      break;
+    }
   }
 
-  // 2. Push real-time message to the specific user via Azure SignalR
-  const displayFileName = audioFileName.replace(/^\d+-/, '');
+  if (!matchedBlobPath) {
+    context.warn(`No audio-in blob found matching transcriptionid ${jobUuid}`);
+    return;
+  }
+
+  const userId = matchedBlobPath.split('/')[0];
+  const displayFileName =
+    matchedBlobPath.split('/').pop()?.replace(/^\d+-/, '') || matchedBlobPath;
+
+  const audioBlobClient = containerClient.getBlockBlobClient(matchedBlobPath);
+  const props = await audioBlobClient.getProperties();
+  await audioBlobClient.setMetadata({
+    ...props.metadata,
+    transcriptionstatus: 'Transcribed',
+  });
+
   context.extraOutputs.set(signalROutput, [
     {
       userId,
       target: 'jobStatusUpdated',
       arguments: [
         {
-          blobPath: audioBlobPath,
+          blobPath: matchedBlobPath,
           fileName: displayFileName,
           status: 'Transcribed',
         },

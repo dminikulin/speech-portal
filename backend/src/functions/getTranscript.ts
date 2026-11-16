@@ -103,7 +103,11 @@ export async function getTranscript(
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '-');
-  if (!blobPath.startsWith(`${sanitizedUserId}/`)) {
+  const normalizedBlobPath = blobPath.includes('/')
+    ? blobPath
+    : `${sanitizedUserId}/${blobPath}`;
+
+  if (!normalizedBlobPath.startsWith(`${sanitizedUserId}/`)) {
     return {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
@@ -111,7 +115,7 @@ export async function getTranscript(
     };
   }
 
-  const rawFileName = blobPath.split('/').pop() || '';
+  const rawFileName = normalizedBlobPath.split('/').pop() || '';
   const baseName = rawFileName.replace(/\.[^/.]+$/, '');
 
   const credential = new StorageSharedKeyCredential(accountName, accountKey);
@@ -119,11 +123,38 @@ export async function getTranscript(
     `https://${accountName}.blob.core.windows.net`,
     credential,
   );
+  const audioContainer = blobServiceClient.getContainerClient('audio-in');
   const transcriptContainer =
     blobServiceClient.getContainerClient('transcripts');
 
   try {
-    // 1. Direct check: Read from the local 'transcripts' container
+    // 1. Direct UUID lookup using transcriptionid stored on the audio-in blob
+    const audioBlobClient =
+      audioContainer.getBlockBlobClient(normalizedBlobPath);
+    if (await audioBlobClient.exists()) {
+      const audioProps = await audioBlobClient.getProperties();
+      const transcriptionId = audioProps.metadata?.transcriptionid;
+
+      if (transcriptionId) {
+        const directJsonClient = transcriptContainer.getBlobClient(
+          `${transcriptionId}/contenturl_0.json`,
+        );
+        if (await directJsonClient.exists()) {
+          const download = await directJsonClient.download();
+          const content = await streamToText(download.readableStreamBody);
+          const parsed = JSON.parse(content);
+          const combinedText = formatTranscriptWithParagraphs(parsed);
+
+          return {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            jsonBody: { text: combinedText },
+          };
+        }
+      }
+    }
+
+    // 2. Fallback scan for legacy transcripts without transcriptionid metadata
     for await (const blob of transcriptContainer.listBlobsFlat()) {
       if (blob.name.endsWith('.json') && !blob.name.endsWith('report.json')) {
         const client = transcriptContainer.getBlobClient(blob.name);

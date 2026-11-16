@@ -9,7 +9,7 @@ import {
 
 export async function onAudioUploaded(
   event: any,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<void> {
   context.log('Event Grid received event:', JSON.stringify(event));
 
@@ -50,7 +50,7 @@ export async function onAudioUploaded(
   const credential = new StorageSharedKeyCredential(accountName, accountKey);
   const blobServiceClient = new BlobServiceClient(
     `https://${accountName}.blob.core.windows.net`,
-    credential
+    credential,
   );
 
   // 1. Mark audio blob metadata as "transcribing"
@@ -62,7 +62,7 @@ export async function onAudioUploaded(
     const props = await audioBlobClient.getProperties();
     await audioBlobClient.setMetadata({
       ...props.metadata,
-      transcriptionstatus: 'transcribing',
+      transcriptionstatus: 'Transcribing',
     });
   } catch (err) {
     context.warn('Could not set initial metadata:', err);
@@ -78,7 +78,7 @@ export async function onAudioUploaded(
       permissions: BlobSASPermissions.parse('r'),
       expiresOn,
     },
-    credential
+    credential,
   ).toString();
 
   const sourceAudioUrl = `https://${accountName}.blob.core.windows.net/audio-in/${blobPath}?${audioSas}`;
@@ -89,7 +89,7 @@ export async function onAudioUploaded(
       permissions: ContainerSASPermissions.parse('rwlac'),
       expiresOn,
     },
-    credential
+    credential,
   ).toString();
 
   const destinationContainerUrl = `https://${accountName}.blob.core.windows.net/transcripts?${destSas}`;
@@ -130,10 +130,22 @@ export async function onAudioUploaded(
     const props = await audioBlobClient.getProperties();
     await audioBlobClient.setMetadata({
       ...props.metadata,
-      transcriptionstatus: 'failed',
+      transcriptionstatus: 'Failed',
     });
     return;
   }
+
+  const speechResult = await response.json();
+  // speechResult.self looks like:
+  // "https://swedencentral.api.cognitive.microsoft.com/speechtotext/v3.2/transcriptions/<job-uuid>"
+  const transcriptionId = speechResult.self?.split('/').pop() || '';
+
+  const props = await audioBlobClient.getProperties();
+  await audioBlobClient.setMetadata({
+    ...props.metadata,
+    transcriptionstatus: 'Transcribing',
+    transcriptionid: transcriptionId,
+  });
 
   context.log(`Job successfully dispatched for ${blobPath}`);
 }

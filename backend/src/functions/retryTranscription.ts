@@ -1,27 +1,40 @@
-import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
-import { BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
+import {
+  app,
+  HttpRequest,
+  HttpResponseInit,
+  InvocationContext,
+} from '@azure/functions';
+import {
+  BlobServiceClient,
+  StorageSharedKeyCredential,
+} from '@azure/storage-blob';
 
 export async function retryTranscription(
   request: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
 ): Promise<HttpResponseInit> {
   const body = (await request.json().catch(() => ({}))) as {
     userId?: string;
     blobPath?: string;
   };
+  const rawBlobPath = body.blobPath || request.query.get('blobPath');
   const userId = body.userId || request.query.get('userId');
-  const blobPath = body.blobPath || request.query.get('blobPath');
 
-  if (!userId || !blobPath || !blobPath.startsWith(`${userId}/`)) {
-    return { status: 400, jsonBody: { error: 'Invalid userId or blobPath' } };
+  if (!userId || !rawBlobPath) {
+    return { status: 400, jsonBody: { error: 'Missing userId or blobPath' } };
   }
+
+  // Ensure blobPath includes the userId folder prefix
+  const blobPath = rawBlobPath.startsWith(`${userId}/`)
+    ? rawBlobPath
+    : `${userId}/${rawBlobPath}`;
 
   const accountName = process.env.STORAGE_ACCOUNT_NAME!;
   const accountKey = process.env.STORAGE_ACCOUNT_KEY!;
   const credential = new StorageSharedKeyCredential(accountName, accountKey);
   const blobServiceClient = new BlobServiceClient(
     `https://${accountName}.blob.core.windows.net`,
-    credential
+    credential,
   );
 
   const blobClient = blobServiceClient
@@ -38,7 +51,9 @@ export async function retryTranscription(
   });
   await poller.pollUntilDone();
 
-  context.log(`Re-triggered Event Grid BlobCreated via self-copy for ${blobPath}`);
+  context.log(
+    `Re-triggered Event Grid BlobCreated via self-copy for ${blobPath}`,
+  );
   return { status: 202, jsonBody: { status: 'Transcribing', blobPath } };
 }
 
