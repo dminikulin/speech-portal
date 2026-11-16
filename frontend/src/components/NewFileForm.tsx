@@ -11,7 +11,6 @@ import { Field, FieldDescription } from "./ui/field"
 import { Input } from "./ui/input"
 import { cn } from "cn"
 import React, { useState } from "react"
-import { triggerTranscription } from "@/services/files"
 import { uploadAudioFile } from "@/services/upload"
 import { toast } from "./ui/toast"
 import { useAuth } from "@/hooks/useAuth"
@@ -63,7 +62,7 @@ export default function NewFileForm({
     let status: NonNullable<AudioFileItem["status"]> = "Failed"
     let transcriptionError: unknown
     try {
-      await triggerTranscription(blobPath, user.id)
+      await onUploaded(blobPath, "Transcribing")
       status = "Transcribing"
     } catch (err) {
       transcriptionError = err

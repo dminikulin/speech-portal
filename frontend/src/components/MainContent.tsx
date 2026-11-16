@@ -72,9 +72,6 @@ export default function MainContent() {
             type: "success",
             description: `File ${file.name} transcribed`,
           })
-          showNotification("Transcription Complete", {
-            body: `Transcript for "${file.name}" is ready.`,
-          })
         }
       }
       setFiles(Array.isArray(data) ? data : [])
@@ -160,77 +157,30 @@ export default function MainContent() {
     return () => {
       cancelled = true
     }
-  }, [userId, loadFiles])
-
-  const hasTranscribingFiles =
-    Array.isArray(files) && files.some((f) => f.status === "Transcribing")
-
-  useEffect(() => {
-    if (!userId || !hasTranscribingFiles) {
-      return
-    }
-
-    let cancelled = false
-    const refreshStatuses = async () => {
-      try {
-        const data = await fetchUploadedFiles(userId)
-        if (cancelled) return
-
-        for (const file of data) {
-          if (
-            previousStatuses.current.get(file.blobPath) === "Transcribing" &&
-            file.status === "Transcribed"
-          ) {
-            toast.add({
-              type: "success",
-              description: `File ${file.name} transcribed`,
-            })
-
-            showNotification("Transcription Complete", {
-              body: `Transcript for "${file.name}" is ready.`,
-            })
-          }
-        }
-
-        previousStatuses.current = new Map(
-          data.map((file) => [file.blobPath, file.status])
-        )
-        setFiles(data)
-        setSelectedFile((current) =>
-          current
-            ? (data.find((file) => file.blobPath === current.blobPath) ??
-              current)
-            : null
-        )
-      } catch (err) {
-        console.error("Error checking transcription status:", err)
-      }
-    }
-
-    const intervalId = setInterval(() => {
-      void refreshStatuses()
-    }, 15000)
-
-    return () => {
-      cancelled = true
-      clearInterval(intervalId)
-    }
-  }, [hasTranscribingFiles, userId])
+  }, [userId])
 
   useEffect(() => {
     if (!user?.id) return
 
-    getSignalRConnection(user.id).then((connection) => {
-      connection.on("jobStatusUpdated", (data) => {
-        // 1. Play browser notification
-        showNotification("Transcription Complete", {
-          body: `Your transcript for "${data.fileName || "audio file"}" is ready.`,
-        })
+    let activeConnection: Awaited<
+      ReturnType<typeof getSignalRConnection>
+    > | null = null
 
-        // 2. Immediately reload table rows to flip badge to "Transcribed"
-        loadFiles()
+    const handleJobStatusUpdated = (data: { fileName?: string }) => {
+      showNotification("Transcription Complete", {
+        body: `Your transcript for "${data.fileName || "audio file"}" is ready.`,
       })
+      loadFiles()
+    }
+
+    getSignalRConnection(user.id).then((connection) => {
+      activeConnection = connection
+      connection.on("jobStatusUpdated", handleJobStatusUpdated)
     })
+
+    return () => {
+      activeConnection?.off("jobStatusUpdated", handleJobStatusUpdated)
+    }
   }, [user?.id, loadFiles])
 
   const handleRowClick = (file: AudioFileItem) => {

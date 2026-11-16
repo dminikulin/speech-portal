@@ -51,24 +51,6 @@ export async function deleteAudioFile(
   }
 }
 
-export const triggerTranscription = async (
-  blobPath: string,
-  userId: string
-): Promise<void> => {
-  const response = await fetch(`${cleanBase}/api/transcriptions/start`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ blobPath, userId }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err.error || "Failed to trigger transcription")
-  }
-}
-
 export const fetchTranscript = async (
   blobPath: string,
   userId: string

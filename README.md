@@ -27,7 +27,6 @@ How it works:
 You can access the projects via these two links:
 
 - [Azure deployment](https://polite-stone-05a4dec0f.4.azurestaticapps.net/)
-- [Cloudflare proxy](https://speechportal-proxy.speechportal.workers.dev/)
 
 ---
 
@@ -63,7 +62,3 @@ func azure functionapp publish [your-function-app-name]
 **Frontend directory**
 
 In `frontend` directory, you need to set up `VITE_API_URL` for both development and production. `.env.example` shows how to write to this variable.
-
-**Proxy directory**
-
-`Proxy` directory is responsible for host a project on a cleaner URL, compared to what Azure provided to the app (with the help of `workers.dev`). Use this folder if you need to set up a new proxy for development purposes.
