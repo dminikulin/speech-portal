@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu"
 import type { AudioFileItem } from "@/types/AudioFileItem"
-import { fetchTranscript } from "@/services/files"
+import { fetchTranscript, retryTranscription } from "@/services/files"
 import { useAuth } from "@/hooks/useAuth"
 
 interface TranscribedTextProps {
@@ -269,13 +269,13 @@ export default function TranscribedText({
   const handleRedoTranscribe = async () => {
     if (!user?.id || !file?.blobPath) return
 
-    // Immediately clear existing text and enter running state
     setTranscriptionText(null)
     setStatus("Running")
     setErrorMsg(null)
 
     try {
-      // await triggerTranscription(file.blobPath, user.id)
+      await retryTranscription(file.blobPath, user.id)
+      onSuccess?.()
       startPollingForCompletion(file.blobPath, user.id)
     } catch (err) {
       setStatus("Failed")

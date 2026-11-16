@@ -80,3 +80,19 @@ export const fetchTranscript = async (
   // Support whichever property name getTranscript.ts sends back
   return data.text || data.transcriptionText || data.transcript || null
 }
+
+export async function retryTranscription(
+  blobPath: string,
+  userId: string
+): Promise<void> {
+  const res = await fetch(`${cleanBase}/api/files/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, blobPath }),
+  })
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || "Failed to restart transcription.")
+  }
+}
