@@ -11,13 +11,4 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
-  server: {
-    proxy: {
-      "/api": {
-        target: 'https://speechportal-func-app.azurewebsites.net',
-        changeOrigin: true,
-        secure: true,
-      },
-    },
-  },
 })

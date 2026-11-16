@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu"
 import type { AudioFileItem } from "@/types/AudioFileItem"
-import { triggerTranscription, fetchTranscript } from "@/services/files"
+import { fetchTranscript } from "@/services/files"
 import { useAuth } from "@/hooks/useAuth"
 
 interface TranscribedTextProps {
@@ -275,7 +275,7 @@ export default function TranscribedText({
     setErrorMsg(null)
 
     try {
-      await triggerTranscription(file.blobPath, user.id)
+      // await triggerTranscription(file.blobPath, user.id)
       startPollingForCompletion(file.blobPath, user.id)
     } catch (err) {
       setStatus("Failed")
