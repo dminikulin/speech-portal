@@ -1,7 +1,10 @@
 import type { AudioFileItem } from "@/types/AudioFileItem"
 
-const BASE_URL = import.meta.env.VITE_API_URL || ""
-const cleanBase = BASE_URL.replace(/\/+$/, "")
+const RAW_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://speechportal-func-app.azurewebsites.net"
+const cleanBase = RAW_BASE_URL.replace(/\/+$/, "")
 
 export const fetchUploadedFiles = async (
   userId: string

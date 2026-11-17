@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog"
 import { useCallback, useEffect, useRef, useState } from "react"
+import type { DragEvent as ReactDragEvent } from "react"
 import TranscribedText from "./TranscribedText"
 import type { AudioFileItem } from "@/types/AudioFileItem"
 import { deleteAudioFile, fetchUploadedFiles } from "@/services/files"
@@ -45,6 +46,7 @@ import {
   showNotification,
 } from "@/services/notifications"
 import { getSignalRConnection } from "@/services/signalR"
+import { cn } from "cn"
 
 export default function MainContent() {
   const { user } = useAuth()
@@ -56,7 +58,52 @@ export default function MainContent() {
 
   const [files, setFiles] = useState<AudioFileItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))
+  const [isDragging, setIsDragging] = useState(false)
+  const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const previousStatuses = useRef(new Map<string, AudioFileItem["status"]>())
+
+  const clearDroppedFile = useCallback(() => setDroppedFile(null), [])
+
+  const handleFileDragOver = (event: ReactDragEvent<HTMLElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return
+    event.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleFileDragLeave = (event: ReactDragEvent<HTMLElement>) => {
+    if (
+      !(event.relatedTarget instanceof Node) ||
+      !event.currentTarget.contains(event.relatedTarget)
+    ) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleFileDrop = (event: ReactDragEvent<HTMLElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return
+    event.preventDefault()
+    setIsDragging(false)
+
+    const droppedFiles = event.dataTransfer.files
+    if (droppedFiles.length !== 1) {
+      toast.add({
+        type: "error",
+        description: "Please drop one audio file at a time.",
+      })
+      return
+    }
+
+    const file = droppedFiles[0]
+    if (!/\.(mp3|wav)$/i.test(file.name)) {
+      toast.add({
+        type: "error",
+        description: "Please drop an MP3 or WAV audio file.",
+      })
+      return
+    }
+
+    setDroppedFile(file)
+  }
 
   const loadFiles = useCallback(async () => {
     if (!userId) return
@@ -90,6 +137,23 @@ export default function MainContent() {
       setLoading(false)
     }
   }, [userId])
+
+  // to prevent the browser automatically open the file in a different window if the file isn't dragged into an area
+  useEffect(() => {
+    const preventDefaultFileNavigation = (event: DragEvent) => {
+      if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener("dragover", preventDefaultFileNavigation, true)
+    window.addEventListener("drop", preventDefaultFileNavigation, true)
+
+    return () => {
+      window.removeEventListener("dragover", preventDefaultFileNavigation, true)
+      window.removeEventListener("drop", preventDefaultFileNavigation, true)
+    }
+  }, [])
 
   const handleUploaded = useCallback(
     async (blobPath: string, status: NonNullable<AudioFileItem["status"]>) => {
@@ -216,35 +280,63 @@ export default function MainContent() {
     }
   }
 
+  const renderDropOverlay = (positionClass: string) =>
+    isDragging ? (
+      <div
+        className={`${positionClass} pointer-events-none z-20 flex items-center justify-center rounded-md border-2 border-dashed border-zinc-600 bg-white/75 text-lg font-medium text-zinc-600`}
+      >
+        Drop one MP3 or WAV audio file to upload
+      </div>
+    ) : null
+
   return (
-    <main className="flex min-h-0 min-w-[75%] flex-1 flex-col items-center bg-zinc-50">
-      <NewFileForm
-        className="my-5 self-start"
-        onUploaded={handleUploaded}
-      ></NewFileForm>
+    <main
+      className="flex min-h-0 min-w-[75%] flex-1 flex-col items-center bg-zinc-50"
+      onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
+      onDrop={handleFileDrop}
+    >
+      <div className="my-5 flex w-full items-center gap-3">
+        <NewFileForm
+          className="self-start"
+          onUploaded={handleUploaded}
+          droppedFile={droppedFile}
+          onDroppedFileHandled={clearDroppedFile}
+        ></NewFileForm>
+      </div>
       {loading ? (
-        <div className="flex flex-1 items-center justify-center">
+        <div className="relative m-5 flex min-h-0 w-full flex-1 items-center justify-center">
           <div className="loader"></div>
+          {renderDropOverlay("absolute inset-0")}
         </div>
       ) : files.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Empty className="max-w-md border-2 border-dashed">
+        <div className="relative m-5 flex min-h-0 w-full flex-1 items-center justify-center">
+          <Empty
+            className={cn("max-w-md border-2 border-dashed", {
+              "opacity-0": isDragging,
+            })}
+          >
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <AudioLines></AudioLines>
               </EmptyMedia>
               <EmptyTitle>No files yet</EmptyTitle>
               <EmptyDescription className="w-[75%]">
-                Press <span className="font-mono">"Add new transcript"</span>{" "}
-                button to add a new file
+                Press <span className="font-mono">"Add new transcript"</span> or
+                drop an MP3 or WAV file here
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
+          {renderDropOverlay("absolute inset-0")}
         </div>
       ) : (
         <div className="m-5 flex min-h-0 w-full flex-1 gap-4 overflow-hidden">
-          <div className="min-w-0 flex-1">
-            <ScrollArea className="my-2 h-full">
+          <div className="relative min-h-0 min-w-0 flex-1 py-2">
+            <ScrollArea
+              className={cn("h-full", {
+                "opacity-0": isDragging,
+              })}
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -312,6 +404,7 @@ export default function MainContent() {
                 </TableBody>
               </Table>
             </ScrollArea>
+            {renderDropOverlay("absolute inset-x-0 inset-y-2")}
           </div>
           <TranscribedText
             file={selectedFile ?? null}

@@ -19,16 +19,28 @@ export async function retryTranscription(
     blobPath?: string;
   };
   const rawBlobPath = body.blobPath || request.query.get('blobPath');
-  const userId = body.userId || request.query.get('userId');
+  const rawUserId = body.userId || request.query.get('userId');
 
-  if (!userId || !rawBlobPath) {
+  if (!rawUserId || !rawBlobPath) {
     return { status: 400, jsonBody: { error: 'Missing userId or blobPath' } };
   }
 
-  // Ensure blobPath includes the userId folder prefix
-  const blobPath = rawBlobPath.startsWith(`${userId}/`)
+  const sanitizedUserId = rawUserId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-');
+
+  // Ensure blobPath uses the sanitized userId folder prefix
+  const blobPath = rawBlobPath.includes('/')
     ? rawBlobPath
-    : `${userId}/${rawBlobPath}`;
+    : `${sanitizedUserId}/${rawBlobPath}`;
+
+  if (!blobPath.startsWith(`${sanitizedUserId}/`)) {
+    return {
+      status: 403,
+      jsonBody: { error: 'Unauthorized access to this file' },
+    };
+  }
 
   const accountName = process.env.STORAGE_ACCOUNT_NAME!;
   const accountKey = process.env.STORAGE_ACCOUNT_KEY!;

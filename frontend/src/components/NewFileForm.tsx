@@ -21,12 +21,16 @@ interface NewFileFormProps {
     blobPath: string,
     status: NonNullable<AudioFileItem["status"]>
   ) => Promise<void>
+  droppedFile?: File | null
+  onDroppedFileHandled?: () => void
   className?: string
 }
 
 export default function NewFileForm({
   className,
   onUploaded,
+  droppedFile,
+  onDroppedFileHandled,
 }: NewFileFormProps) {
   const { user } = useAuth()
 
@@ -34,49 +38,87 @@ export default function NewFileForm({
   const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const processedDroppedFile = React.useRef<File | null>(null)
 
-  const handleOpenChange = (isOpen: boolean) => {
+  const handleOpenChange = React.useCallback((isOpen: boolean) => {
     setOpen(isOpen)
     if (!isOpen) {
       setFile(null)
       setError(null)
     }
-  }
+  }, [])
 
-  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!file || isUploading || !user?.id) return
+  const uploadFile = React.useCallback(
+    async (fileToUpload: File, source: "form" | "drop") => {
+      if (!user?.id) return
+      if (isUploading) {
+        if (source === "drop") {
+          toast.add({
+            type: "error",
+            description: "An upload is already in progress.",
+          })
+        }
+        return
+      }
 
-    setIsUploading(true)
-    setError(null)
+      setIsUploading(true)
+      setError(null)
 
-    let blobPath: string
-    try {
-      blobPath = await uploadAudioFile(file, user.id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed")
-      setIsUploading(false)
+      try {
+        let blobPath: string
+        try {
+          blobPath = await uploadAudioFile(fileToUpload, user.id)
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Upload failed"
+          if (source === "form") {
+            setError(message)
+          } else {
+            toast.add({ type: "error", description: message })
+          }
+          return
+        }
+
+        try {
+          await onUploaded(blobPath, "Transcribing")
+          toast.add({
+            type: "success",
+            description: `File ${fileToUpload.name} uploaded. Transcription started.`,
+          })
+        } catch (err) {
+          toast.add({
+            type: "error",
+            description:
+              err instanceof Error
+                ? `File uploaded, but the file list could not be refreshed: ${err.message}`
+                : "File uploaded, but the file list could not be refreshed.",
+          })
+        }
+
+        if (source === "form") handleOpenChange(false)
+      } finally {
+        setIsUploading(false)
+      }
+    },
+    [handleOpenChange, isUploading, onUploaded, user?.id]
+  )
+
+  React.useEffect(() => {
+    if (!droppedFile) {
+      processedDroppedFile.current = null
       return
     }
+    if (processedDroppedFile.current === droppedFile) return
 
-    try {
-      await onUploaded(blobPath, "Transcribing")
-      toast.add({
-        type: "success",
-        description: `File ${file.name} uploaded. Transcription started.`,
-      })
-    } catch (err) {
-      toast.add({
-        type: "error",
-        description:
-          err instanceof Error
-            ? `File uploaded, but the file list could not be refreshed: ${err.message}`
-            : "File uploaded, but the file list could not be refreshed.",
-      })
-    } finally {
-      handleOpenChange(false)
-      setIsUploading(false)
-    }
+    processedDroppedFile.current = droppedFile
+    onDroppedFileHandled?.()
+    void uploadFile(droppedFile, "drop")
+  }, [droppedFile, onDroppedFileHandled, uploadFile])
+
+  const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!file) return
+
+    void uploadFile(file, "form")
   }
 
   return (
