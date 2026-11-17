@@ -66,18 +66,19 @@ export async function retryTranscription(
   );
 
   // Self-copy fires a fresh Microsoft.Storage.BlobCreated event for Event Grid
-  const poller = await blobClient.beginCopyFromURL(blobClient.url, {
+  const downloadResponse = await blobClient.downloadToBuffer();
+  await blobClient.uploadData(downloadResponse, {
+    blobHTTPHeaders: {
+      blobContentType: props.contentType || 'audio/mpeg',
+    },
     metadata: {
       ...props.metadata,
       transcriptionstatus: 'Transcribing',
       transcriptionid: '',
     },
   });
-  await poller.pollUntilDone();
 
-  context.log(
-    `Re-triggered Event Grid BlobCreated via self-copy for ${blobPath}`,
-  );
+  context.log(`Re-uploaded ${blobPath} to trigger Event Grid BlobCreated`);
   return { status: 202, jsonBody: { status: 'Transcribing', blobPath } };
 }
 

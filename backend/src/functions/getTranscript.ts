@@ -128,59 +128,46 @@ export async function getTranscript(
     blobServiceClient.getContainerClient('transcripts');
 
   try {
-    // 1. Direct UUID lookup using transcriptionid stored on the audio-in blob
+    // 1. Check if normalized transcript JSON exists in 'transcripts'
+    const expectedJsonPath = normalizedBlobPath.replace(/\.[^/.]+$/, '.json');
+    const directJsonClient =
+      transcriptContainer.getBlobClient(expectedJsonPath);
+
+    if (await directJsonClient.exists()) {
+      const download = await directJsonClient.download();
+      const content = await streamToText(download.readableStreamBody);
+      const parsed = JSON.parse(content);
+      const combinedText = formatTranscriptWithParagraphs(parsed);
+
+      return {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        jsonBody: { text: combinedText },
+      };
+    }
+
+    // 2. Check audio blob metadata—even if transcriptionid is empty right after retry
     const audioBlobClient =
       audioContainer.getBlockBlobClient(normalizedBlobPath);
     if (await audioBlobClient.exists()) {
       const audioProps = await audioBlobClient.getProperties();
-      const transcriptionId = audioProps.metadata?.transcriptionid;
+      const status = (
+        audioProps.metadata?.transcriptionstatus || ''
+      ).toLowerCase();
 
-      if (transcriptionId) {
-        // 1. Check if normalized transcript JSON exists in 'transcripts'
-        const expectedJsonPath = normalizedBlobPath.replace(
-          /\.[^/.]+$/,
-          '.json',
-        );
-        const directJsonClient =
-          transcriptContainer.getBlobClient(expectedJsonPath);
-
-        if (await directJsonClient.exists()) {
-          const download = await directJsonClient.download();
-          const content = await streamToText(download.readableStreamBody);
-          const parsed = JSON.parse(content);
-          const combinedText = formatTranscriptWithParagraphs(parsed);
-
-          return {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-            jsonBody: { text: combinedText },
-          };
-        }
-
-        // 2. If audio blob is currently transcribing, return 202 so frontend shows the loader
-        const audioBlobClient =
-          audioContainer.getBlockBlobClient(normalizedBlobPath);
-        if (await audioBlobClient.exists()) {
-          const audioProps = await audioBlobClient.getProperties();
-          const status = (
-            audioProps.metadata?.transcriptionstatus || ''
-          ).toLowerCase();
-
-          if (status === 'transcribing') {
-            return {
-              status: 202,
-              headers: { 'Content-Type': 'application/json' },
-              jsonBody: {
-                status: 'Running',
-                message: 'Transcription in progress.',
-              },
-            };
-          }
-        }
+      if (status === 'transcribing') {
+        return {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' },
+          jsonBody: {
+            status: 'Running',
+            message: 'Transcription in progress.',
+          },
+        };
       }
     }
 
-    // 2. Fallback scan for legacy transcripts without transcriptionid metadata
+    // 3. Fallback scan for legacy transcripts without normalized paths
     for await (const blob of transcriptContainer.listBlobsFlat()) {
       if (blob.name.endsWith('.json') && !blob.name.endsWith('report.json')) {
         const client = transcriptContainer.getBlobClient(blob.name);
@@ -209,88 +196,10 @@ export async function getTranscript(
       }
     }
 
-    // 2. Fallback: Query Azure Speech API for in-progress or internal jobs
-    const listUrl = `https://${speechRegion}.api.cognitive.microsoft.com/speechtotext/v3.2/transcriptions?top=30`;
-    const listRes = await fetch(listUrl, {
-      headers: { 'Ocp-Apim-Subscription-Key': speechKey },
-    });
-
-    if (!listRes.ok) {
-      return {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-        jsonBody: { message: 'Transcript not found in container.' },
-      };
-    }
-
-    const listData = await listRes.json();
-    const jobs = listData.values || [];
-
-    const matchedJob = jobs.find(
-      (job: any) =>
-        job.displayName?.includes(baseName) ||
-        job.contentUrls?.some((url: string) => url.includes(baseName)),
-    );
-
-    if (!matchedJob) {
-      return {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-        jsonBody: { message: 'Transcription job not found.' },
-      };
-    }
-
-    if (matchedJob.status === 'Running' || matchedJob.status === 'NotStarted') {
-      return {
-        status: 202,
-        headers: { 'Content-Type': 'application/json' },
-        jsonBody: { status: 'Running', message: 'Transcription in progress.' },
-      };
-    }
-
-    if (matchedJob.status === 'Failed') {
-      return {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-        jsonBody: { error: 'Transcription job failed on Azure Speech.' },
-      };
-    }
-
-    // If job succeeded but content was stored in internal Speech managed storage
-    const filesUrl = matchedJob.links?.files;
-    if (filesUrl) {
-      const filesRes = await fetch(filesUrl, {
-        headers: { 'Ocp-Apim-Subscription-Key': speechKey },
-      });
-      if (filesRes.ok) {
-        const filesData = await filesRes.json();
-        const tFile = (filesData.values || []).find(
-          (f: any) => f.kind === 'Transcription',
-        );
-
-        if (tFile?.links?.contentUrl) {
-          const contentRes = await fetch(tFile.links.contentUrl);
-          if (contentRes.ok) {
-            const contentJson = await contentRes.json();
-            const combinedText =
-              contentJson.combinedRecognizedPhrases
-                ?.map((p: any) => p.display)
-                .join(' ') || '';
-
-            return {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-              jsonBody: { text: combinedText },
-            };
-          }
-        }
-      }
-    }
-
     return {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
-      jsonBody: { message: 'Transcript not available yet.' },
+      jsonBody: { message: 'Transcript not found.' },
     };
   } catch (err: unknown) {
     context.error('Error fetching transcript:', err);

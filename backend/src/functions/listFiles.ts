@@ -70,23 +70,16 @@ export async function listFiles(
 
   const speechKey = process.env.SPEECH_KEY;
   const speechRegion = process.env.SPEECH_REGION;
-  const succeededJobDisplayNames: string[] = [];
-
-  if (speechKey && speechRegion) {
-    try {
-      const speechRes = await fetch(
-        `https://${speechRegion}.api.cognitive.microsoft.com/speechtotext/v3.2/transcriptions?top=50`,
-        { headers: { 'Ocp-Apim-Subscription-Key': speechKey } },
-      );
-      if (speechRes.ok) {
-        const speechData = await speechRes.json();
-        for (const job of speechData.values || []) {
-          if (job.status === 'Succeeded') {
-            succeededJobDisplayNames.push(job.displayName || '');
-          }
-        }
+  // Collect existing transcript blob paths once (no need to download/parse JSONs)
+  const existingTranscriptPaths = new Set<string>();
+  try {
+    for await (const tBlob of transcriptContainerClient.listBlobsFlat()) {
+      if (tBlob.name.endsWith('.json') && !tBlob.name.endsWith('report.json')) {
+        existingTranscriptPaths.add(tBlob.name);
       }
-    } catch {}
+    }
+  } catch {
+    // If transcripts container is empty or missing
   }
 
   const files = [];
@@ -118,27 +111,23 @@ export async function listFiles(
     const baseName = rawFileName.replace(/\.[^/.]+$/, '');
 
     // Check if any transcript JSON recorded this file's unique baseName
-    const hasContainerTranscript = transcribedSources.some(
-      (src) =>
-        src.includes(baseName) || src.includes(encodeURIComponent(baseName)),
+    const expectedTranscriptPath = blob.name.replace(/\.[^/.]+$/, '.json');
+    const hasContainerTranscript = existingTranscriptPaths.has(
+      expectedTranscriptPath,
     );
-
-    const hasSpeechJob = succeededJobDisplayNames.some((name) =>
-      name.includes(baseName),
-    );
-
-    const hasTranscript = hasContainerTranscript || hasSpeechJob;
 
     const transcriptionStatus = (
       blob.metadata?.transcriptionstatus || ''
     ).toLowerCase();
-    const status = hasTranscript
-      ? 'Transcribed'
-      : transcriptionStatus === 'transcribing'
-        ? 'Transcribing'
-        : transcriptionStatus === 'failed'
-          ? 'Failed'
-          : undefined;
+
+    const status =
+      hasContainerTranscript || transcriptionStatus === 'transcribed'
+        ? 'Transcribed'
+        : transcriptionStatus === 'transcribing'
+          ? 'Transcribing'
+          : transcriptionStatus === 'failed'
+            ? 'Failed'
+            : undefined;
 
     files.push({
       name: cleanFileName,
