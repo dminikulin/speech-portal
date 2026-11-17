@@ -283,7 +283,7 @@ export default function MainContent() {
   const renderDropOverlay = (positionClass: string) =>
     isDragging ? (
       <div
-        className={`${positionClass} pointer-events-none z-20 flex items-center justify-center rounded-md border-2 border-dashed border-zinc-600 bg-white/75 text-lg font-medium text-zinc-600`}
+        className={`${positionClass} pointer-events-none z-20 flex items-center justify-center rounded-md border-2 border-dashed border-zinc-400 bg-white/75 text-lg font-medium text-zinc-400`}
       >
         Drop one MP3 or WAV audio file to upload
       </div>

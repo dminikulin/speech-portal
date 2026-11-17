@@ -47,6 +47,7 @@ export default function TranscribedText({
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isRedoingRef = useRef(false)
 
   // Clear timers on unmount
   useEffect(() => {
@@ -66,6 +67,7 @@ export default function TranscribedText({
         try {
           const text = await fetchTranscript(blobPath, userId)
           if (text) {
+            isRedoingRef.current = false
             setTranscriptionText(text)
             setStatus("Succeeded")
             onSuccess?.()
@@ -85,6 +87,7 @@ export default function TranscribedText({
 
   useEffect(() => {
     if (!open || !user?.id || !file?.blobPath) {
+      isRedoingRef.current = false
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current)
         pollTimerRef.current = null
@@ -103,10 +106,12 @@ export default function TranscribedText({
     const userId = user.id
 
     const loadTranscript = async () => {
-      setLoading(true)
-      setTranscriptionText(null)
-      setStatus("Idle")
-      setErrorMsg(null)
+      if (!isRedoingRef.current) {
+        setLoading(true)
+        setTranscriptionText(null)
+        setStatus("Idle")
+        setErrorMsg(null)
+      }
       try {
         const text = await fetchTranscript(blobPath, userId)
         if (!isMounted) return
@@ -129,10 +134,15 @@ export default function TranscribedText({
         }
       } catch (err) {
         if (!isMounted) return
-        setStatus("Failed")
-        setErrorMsg(
-          err instanceof Error ? err.message : "Failed to load transcript"
-        )
+        if (isRedoingRef.current || file.status === "Transcribing") {
+          setStatus("Running")
+          startPollingForCompletion(blobPath, userId)
+        } else {
+          setStatus("Failed")
+          setErrorMsg(
+            err instanceof Error ? err.message : "Failed to load transcript"
+          )
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -269,6 +279,7 @@ export default function TranscribedText({
   const handleRedoTranscribe = async () => {
     if (!user?.id || !file?.blobPath) return
 
+    isRedoingRef.current = true
     setTranscriptionText(null)
     setStatus("Running")
     setErrorMsg(null)
@@ -278,6 +289,7 @@ export default function TranscribedText({
       onSuccess?.()
       startPollingForCompletion(file.blobPath, user.id)
     } catch (err) {
+      isRedoingRef.current = false
       setStatus("Failed")
       setErrorMsg(
         err instanceof Error ? err.message : "Failed to restart transcription."

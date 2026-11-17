@@ -24,9 +24,7 @@ How it works:
 - Browser notifications;
 - Transcript exports;
 
-You can access the projects via these two links:
-
-- [Azure deployment](https://polite-stone-05a4dec0f.4.azurestaticapps.net/)
+You can access the project [HERE](https://polite-stone-05a4dec0f.4.azurestaticapps.net/)
 
 ---
 

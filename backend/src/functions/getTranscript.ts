@@ -136,6 +136,7 @@ export async function getTranscript(
       const transcriptionId = audioProps.metadata?.transcriptionid;
 
       if (transcriptionId) {
+        // 1. Check if normalized transcript JSON exists in 'transcripts'
         const expectedJsonPath = normalizedBlobPath.replace(
           /\.[^/.]+$/,
           '.json',
@@ -156,6 +157,7 @@ export async function getTranscript(
           };
         }
 
+        // 2. If audio blob is currently transcribing, return 202 so frontend shows the loader
         const audioBlobClient =
           audioContainer.getBlockBlobClient(normalizedBlobPath);
         if (await audioBlobClient.exists()) {
